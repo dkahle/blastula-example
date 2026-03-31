@@ -1,0 +1,127 @@
+---
+title: "Sending Emails with blastula"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(eval = FALSE)
+```
+
+This project demonstrates how to use [**blastula**](https://github.com/rstudio/blastula) to send personalized emails with attachments to a list of clients stored in an Excel spreadsheet.
+
+
+## Project structure
+
+```
+blastula-example/
+├── assets/
+│   └── pdf-example.pdf   # Attachment to send
+├── clients.xlsx          # Client contact list
+├── README.Rmd            # This file (renders to README.md)
+└── send-emails.R         # Email sending script
+```
+
+
+## Setup
+
+Install the required packages:
+
+```{r}
+install.packages(c("blastula", "readxl", "glue"))
+```
+
+
+## Client list
+
+`clients.xlsx` contains the contact list with columns `email`, `first`, and `last`:
+
+```{r}
+library("readxl")
+
+(clients <- read_xlsx("clients.xlsx"))
+```
+
+
+
+## Composing and sending emails
+
+### Step 1: Store your SMTP credentials
+
+Before sending, store your SMTP credentials in your system keyring. You only need to do this once:
+
+```{r}
+if (!requireNamespace("keyring")) install.packages("keyring")
+library("blastula")
+
+create_smtp_creds_key(
+  id = "baylor",
+  user = "david_kahle@baylor.edu",
+  host = "smtp.office365.com",
+  port = 587,
+  use_ssl = TRUE
+)
+```
+
+This will prompt you for your password. If your account has MFA enabled, you may need to generate an App Password through your Microsoft account security settings.
+
+You can verify your stored credentials with:
+
+```{r}
+view_credential_keys()
+```
+
+
+### Step 2: Compose and send a personalized email to each client
+
+```{r}
+library("blastula")
+library("readxl")
+library("glue")
+
+
+# read in the excel spreadsheet containing the email addresses
+clients <- read_xlsx("clients.xlsx")
+
+
+# loop over rows in excel spreadsheet, making emails, attach, and send
+for (i in seq_len(nrow(clients))) {
+
+  client <- clients[i, ]
+
+  # make the email
+  email <- compose_email(
+    body = md(glue(
+      "Hi {client$first},
+
+      Please find the attached document for your review.
+
+      Best,
+
+      David"
+    ))
+  )
+
+  # add attachments
+  email <- add_attachment(email, file = "assets/pdf-example.pdf")
+
+  # send the email
+  smtp_send(
+    email,
+    from = "david_kahle@baylor.edu",
+    to = client$email,
+    subject = glue("Document for {client$first} {client$last}"),
+    credentials = creds_key("baylor")
+  )
+
+  message(glue("Sent to {client$first} {client$last} ({client$email})"))
+}
+```
+
+
+## Standalone script
+
+The same workflow is available as a standalone script in `send-emails.R`, ready to run from RStudio or the command line:
+
+```bash
+Rscript send-emails.R
+```
